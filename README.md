@@ -1,69 +1,202 @@
-# React + TypeScript + Vite
+#Firebase auth with  react hook form and Zod for validation
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Make sure to create firebase config page 
 
-Currently, two official plugins are available:
+```bash
+npm install firebase react-hook-form @hookform/resolvers zod react-router-dom
+npm install -D @types/react @types/react-dom typescript
+``` 
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## Expanding the ESLint configuration
+##Zod Validation Schemas (src/schemas/auth.ts)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+```bash
+import { z } from "zod";
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+export const signupSchema = z
+  .object({
+    email: z.string().min(1, "Email is required").email("Invalid email"),
+    password: z
+      .string()
+      .min(6, "Password must be at least 6 characters")
+      .regex(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+        "Password must contain uppercase, lowercase, and number"
+      ),
+    confirmPassword: z.string().min(1, "Please confirm your password"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+export type SignupFormData = z.infer<typeof signupSchema>;
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+##Login page example
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { loginSchema, type LoginFormData } from '../schemas/auth';
+
+function Login() {
+  const {
+    register,        // Register input fields
+    handleSubmit,    // Handle form submission
+    formState: { errors }, // Access validation errors
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema), // Connect Zod schema
+    mode: 'onChange', // Optional: validate on change
+  });
+
+  async function onSubmit(data: LoginFormData) {
+    try {
+      // data is fully typed and validated
+      console.log('Form data:', data);
+      // Handle login logic here
+    } catch (error) {
+      console.error('Login error:', error);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <div>
+        <label htmlFor="email">Email</label>
+        <input
+          {...register('email')} // Register the field
+          type="email"
+          className={errors.email ? 'border-red-500' : 'border-gray-300'}
+        />
+        {errors.email && (
+          <p className="text-red-500">{errors.email.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="password">Password</label>
+        <input
+          {...register('password')}
+          type="password"
+          className={errors.password ? 'border-red-500' : 'border-gray-300'}
+        />
+        {errors.password && (
+          <p className="text-red-500">{errors.password.message}</p>
+        )}
+      </div>
+
+      <button type="submit">Login</button>
+    </form>
+  );
+}
+
 ```
+
+## example of Context 
+
+```bash
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  type User,
+  type UserCredential,
+} from "firebase/auth";
+
+import { auth, googleProvider } from "../config/firebase";
+import type { AuthContextType, AuthProviderProps } from "../types/auth";
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function useAuth(): AuthContextType {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}
+
+const AuthProvider = ({ children }: AuthProviderProps) => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  async function signup(
+    email: string,
+    password: string
+  ): Promise<UserCredential> {
+    return createUserWithEmailAndPassword(auth, email, password);
+  }
+
+  async function login(
+    email: string,
+    password: string
+  ): Promise<UserCredential> {
+    return signInWithEmailAndPassword(auth, email, password);
+  }
+
+  async function signInWithGoogle(): Promise<UserCredential> {
+    return signInWithPopup(auth, googleProvider);
+  }
+
+  async function logout(): Promise<void> {
+    return signOut(auth);
+  }
+
+  async function resetPassword(email: string): Promise<void> {
+    return sendPasswordResetEmail(auth, email);
+  }
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const value: AuthContextType = {
+    currentUser,
+    signup,
+    login,
+    logout,
+    signInWithGoogle,
+    resetPassword,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+};
+
+export default AuthProvider;
+
+```
+
+### we can take  userId and also store this id on database
+
+```bash
+
+function SomeComponent() {
+  const { currentUser } = useAuth();
+  
+  // Get the Firebase UID
+  const firebaseUid = currentUser?.uid;
+  
+  console.log('Firebase UID:', firebaseUid);
+  
+  return <div>User ID: {firebaseUid}</div>;
+}
+```
+
+
+
