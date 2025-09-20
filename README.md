@@ -1,4 +1,4 @@
-#Firebase auth with  react hook form and Zod for validation
+###Firebase auth with  react hook form and Zod for validation
 
 Make sure to create firebase config page 
 
@@ -8,7 +8,7 @@ npm install -D @types/react @types/react-dom typescript
 ``` 
 
 
-##Zod Validation Schemas (src/schemas/auth.ts)
+###Zod Validation Schemas (src/schemas/auth.ts)
 
 ```bash
 import { z } from "zod";
@@ -36,7 +36,7 @@ export type SignupFormData = z.infer<typeof signupSchema>;
 ```
 
 
-##Login page example
+###Login page example
 
 ```bash
 import { useForm } from 'react-hook-form';
